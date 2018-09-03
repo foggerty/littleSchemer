@@ -1,0 +1,86 @@
+* ARGH etc.
+** Notes on how multirember&Co is breaking my brain....
+
+Col starts out as: (lambda (x y) (length y))
+
+|-------------+------------------------------------|
+| lat         | col                                |
+|-------------+------------------------------------|
+| (1 2 3 2 1) | (lambda (x y) (length y))          |
+| (2 3 2 1)   | (lambda (x y) (col x (cons 1 y)))  |
+| (3 2 1)     | (lambda (x y) (col2 (cons 2 x) y)) |
+| (2 1)       | (lambda (x y) (col3 (cons 3 x) y)) |
+| (1)         | (lambda (x y) (col4 (cons 2 x) y)) |
+| ()          | (lambda (x y) (col5 x (cons 1 y))) |
+|-------------+------------------------------------|
+
+And then we undo......
+
+#+BEGIN_SRC scheme
+  (col6 '() ())
+  (col5 '() '(1))
+  (col4 '(2) '(1))
+  (col3 '(3 2) '(1))
+  (col2 '(2 3 2) '(1))
+  (col '(2 3 2) '(1 1))
+  (length '(1 1))
+#+END_SRC
+
+Comparing continuation passing style with the usual recursive style:
+
+#+BEGIN_SRC scheme
+  (define (length2 lat)
+    "Recursive style"
+    (if (null? lat)
+        0
+        (+ 1 (length2 (cdr lat)))))
+
+  (length2 '(1 2 3))    ; 3
+#+END_SRC
+
+|---------+--------------------------------------|
+| lat     | result                               |
+|---------+--------------------------------------|
+| (1 2 3) | (+ 1 (length (cdr lat)))             |
+| (2 3)   | (+ 1 (+ 1 (length (cdr lat))))       |
+| (3)     | (+ 1 (+ 1 (+ 1 (length (cdr lat))))) |
+| ()      | (+ 1 (+ 1 (+ 1 0)))                  |
+|         | ...... and up.                       |
+|---------+--------------------------------------|
+
+#+BEGIN_SRC scheme
+  (define (length-con lat con)
+    "Now with a continuation...  But still recursive!  But instead of
+  recurring on the natural recursion, we're recurring on the natural
+  recursion AND a function that's built from the current value plus the
+  previous continuation function."
+    (if (null? lat)
+        (con 0)
+        (length-con (cdr lat)
+                    (lambda (x)
+                      (con (+ 1 x))))))
+
+  (define (con x)
+    (+ 0 x))
+
+  (length-con '(1 2 3 4 5 6) con)
+#+END_SRC
+
+I think that a large part of what was confusing me, was that I kept thinking like a C# dev - 'con' is the function 'con', it will always look the same.  Here's where there's a real mind shift, and I need to look at this a totally different way.  'con' is a /variable/ that's passed in.  DO NOT think about its implementation when reading through the length function.  Again, it's a variable - and we're using it to build another function.  Yes, one that is returned to be called again in this function and built up again, but at each stack-frame, 'con' is simply whatever we build up in the previous stack frame.  It's a variable with a different meaning at each level.
+
+This is working with continuations.  In C# land, 'con' would be a known function that always does the same thing.  Here's it's a mutable variable (in a way) that happens to represent some function; one that we can use to build another function.
+
+ARGH!
+
+|---------+--------------------------+--------------------------------------------|
+| lat     | con                      |                                            |
+|---------+--------------------------+--------------------------------------------|
+| (1 2 3) | (+ 0 x)                  |                                            |
+| (2 3)   | (+ 1 (+ 0 x))            |                                            |
+| (3)     | (+ 1 (+ 1 (+ 0 x)))      |                                            |
+| ()      | (+ 1 (+ 1 (+ 1 (+ 0 0))) | <- here is where 'x' is finally passed in. |
+|---------+--------------------------+--------------------------------------------|
+
+So if I'm reading this right, the first will add 1 to the length of (cdr lat), so a traditional recursive definition.  The second, will, when unwinding the stack, call the provided function, which in turn calls the next function etc.
+
+Note that there is no requirement for the con function to be rebuilt at every step.  It's just being used here because variables haven't been introduced yet; we could just call it once when we reach the end of the natural recursion.  That said, I'm not sure how to then break out...
