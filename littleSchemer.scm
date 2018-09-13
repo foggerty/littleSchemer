@@ -324,22 +324,17 @@ list of atoms."
 
 ;;; ========== Chapter the Sixth ==========
 
-(define (operator? n)
-  (or (eq? n '+)
-		(eq? n 'x)
-		(eq? n '^)))
+(define (operator n)
+  (let ((op (cadr n)))
+	 (cond ((eq? '+ op) +)
+			 ((eq? 'x op) *)
+			 ((eq? '^ op) power)
+			 (else
+			  (error "Oh noes!")))))
 
-(define (operator op)
-  (cond ((eq? '+ op) +)
-		  ((eq? 'x op) *)
-		  ((eq? '^ op) power)
-		  (else
-			(error "Oh noes!"))))
-
-(define (get-operator n)
-  (car n))
 (define (first-expression n)
-  (cadr n))
+  (car n))
+
 (define (second-expression n)
   (caddr n))
 
@@ -350,7 +345,7 @@ expression."
 		(number? n)
 		(and (eq? 3 (length n))
 			  (numbered? (first-expression n))
-			  (operator? (get-operator n))
+			  (operator n)
 			  (numbered? (second-expression n)))))
 
 (define (value n)
@@ -359,9 +354,8 @@ expression."
 		  ((atom? n) n)
 		  (else (let ((a (first-expression n))
 						  (b (second-expression n))
-						  (opp (operator (get-operator n))))
+						  (opp (operator n)))
 					 (opp (value a) (value b))))))
-
 
 ;;; ========== Chapter the seventh ==========
 
@@ -428,4 +422,81 @@ expression."
 		(intersection (car lst)
 						  (intersect* (cdr lst)))))
 
+(define (a-pair? lst)
+  "T if lst contains two s-expressions."
+  (and (list? lst)
+		 (eq? 2 (length lst))))
+
+(define (first lst)
+  (car lst))
+
+(define (second lst)
+  (car (cdr lst)))
+
+(define (build a b)
+  (cons a (cons b '())))
+
+(define (fun? lst)
+  "T if lst is a function - FUCK OVERLOADING NAMES - i.e. a list of pairs, where the first element of each pair forms a unique set."
+  (set? (firsts lst)))
+
+(define (reverse lst)
+  (cons (second lst)
+		  (first lst)))
+
+(define (reverse-relation rel)
+  "A relation is a set of pairs.  This reverses the pairs."
+  (cond ((not (set? rel))
+			(error "rel is not a set!"))
+		  ((null? rel)
+			'())
+		  (else
+			(cons (reverse (car rel))
+					(reverse-relation (cdr rel))))))
+
+(define (seconds lst)
+  "Returns a list of the second item in each sub thingie oh god I think I am coming down with the flu cos my brain is giving up on something this simple :-("
+  (cond ((null? lst) '())
+		  (else
+			(cons (second (car lst))
+					(seconds (cdr lst))))))
+
+(define (full-fun? lst)
+  "T if all the second items make a set."
+  (set? (seconds lst)))
+
+;;; ========== Chapter the eighth oh god oh god not this one ==========
+
+(define (rember-f test? a lst)
+  "Use test? to look for a in lst, and return lst without a if found."
+  (cond ((null? lst) '())
+		  ((test? a (car lst))
+			(cdr lst))
+		  (else
+			(cons (car lst)
+					(rember-f test? a (cdr lst))))))
+
+(define (rember-f test?)
+  "Returns a rember function that uses test?."
+  (lambda (a lst)
+	 (cond ((null? lst) '())
+			 ((test? a (car lst)) (cdr lst))
+			 (else
+			  (cons (car lst)
+					  ((rember-f test?) a (cdr lst)))))))
+
+(define fred (rember-f eq?))
+(fred 1 '(3 2 1))  							 ;(3 2)
+
+(define (rember*-f test? a lat)
+  "Urgh, fuck being ill."
+  (cond ((null? lat) '())
+		  ((test? a (car lat))
+			(rember*-f test? a (cdr lat)))
+		  (else
+			(cons (car lat)
+					(rember*-f test? a (cdr lat))))))
+
+;; Oh Christ, continuations again.  Or, "twenty years of imperative
+;; programming means that this is gonna hurt."
 
