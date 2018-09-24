@@ -1,86 +1,131 @@
-* ARGH etc.
-** Notes on how multirember&Co is breaking my brain....
+Argh etc.
 
-Col starts out as: (lambda (x y) (length y))
+All of these notes are from chapter 8 onward, as that's where it gets seriously hard for someone with twenty years of OOP/imperative programming to get their head around things.
 
-|-------------+------------------------------------|
-| lat         | col                                |
-|-------------+------------------------------------|
-| (1 2 3 2 1) | (lambda (x y) (length y))          |
-| (2 3 2 1)   | (lambda (x y) (col x (cons 1 y)))  |
-| (3 2 1)     | (lambda (x y) (col2 (cons 2 x) y)) |
-| (2 1)       | (lambda (x y) (col3 (cons 3 x) y)) |
-| (1)         | (lambda (x y) (col4 (cons 2 x) y)) |
-| ()          | (lambda (x y) (col5 x (cons 1 y))) |
-|-------------+------------------------------------|
-
-And then we undo......
+So far, when returning multiple s-expressions/atoms, they've been cons'd into a list:
 
 #+BEGIN_SRC scheme
-  (col6 '() ())
-  (col5 '() '(1))
-  (col4 '(2) '(1))
-  (col3 '(3 2) '(1))
-  (col2 '(2 3 2) '(1))
-  (col '(2 3 2) '(1 1))
-  (length '(1 1))
+
+  (define (remove-1 lst)
+    "Removes all 1s from lst."
+    (cond ((null? lst) '())
+          ((eq? 1 (car lst)) (remove-1 (cdr lst)))
+          (else
+           (cons (car lst) (remove-1 (cdr lst))))))
+
 #+END_SRC
 
-Comparing continuation passing style with the usual recursive style:
+We're recurring on the cdr of the list as usual, building up a result set as we go along.  If we want to pass in a function that will have the resulting list applied to it, we'd probably go with something like:
 
 #+BEGIN_SRC scheme
-  (define (length2 lat)
-    "Recursive style"
-    (if (null? lat)
-        0
-        (+ 1 (length2 (cdr lat)))))
 
-  (length2 '(1 2 3))    ; 3
+  (define (remove-1 lst cont)
+    "Removes all 1s from lst and then applies result to cont(inuation)."
+    (define (inner working accumulator)
+      (cond ((null? working) accumulator)
+            ((eq? 1 (car working)) (inner (cdr working) accumulator))
+            (else
+             (inner (cdr working) (cons (car working) accumulator)))))
+    (cont (inner lst '())))
+
 #+END_SRC
 
-|---------+--------------------------------------|
-| lat     | result                               |
-|---------+--------------------------------------|
-| (1 2 3) | (+ 1 (length (cdr lat)))             |
-| (2 3)   | (+ 1 (+ 1 (length (cdr lat))))       |
-| (3)     | (+ 1 (+ 1 (+ 1 (length (cdr lat))))) |
-| ()      | (+ 1 (+ 1 (+ 1 0)))                  |
-|         | ...... and up.                       |
-|---------+--------------------------------------|
+The idea behind chapter 8, is that instead of building a list, we're repeatedly building on a closure that's based on the initial function that was passed in.
+
+So in this case, ~length~ would be passed in.  On the first iteration, the function calls itself with ~length~ wrapped in a closure, something like:
 
 #+BEGIN_SRC scheme
-  (define (length-con lat con)
-    "Now with a continuation...  But still recursive!  But instead of
-  recurring on the natural recursion, we're recurring on the natural
-  recursion AND a function that's built from the current value plus the
-  previous continuation function."
-    (if (null? lat)
-        (con 0)
-        (length-con (cdr lat)
-                    (lambda (x)
-                      (con (+ 1 x))))))
 
-  (define (con x)
-    (+ 0 x))
+  (remove-1 (cdr lst)
+            (lambda (remainder)
+              (length (cons (car lst) remainder)))))
 
-  (length-con '(1 2 3 4 5 6) con)
 #+END_SRC
 
-I think that a large part of what was confusing me, was that I kept thinking like a C# dev - 'con' is the function 'con', it will always look the same.  Here's where there's a real mind shift, and I need to look at this a totally different way.  'con' is a /variable/ that's passed in.  DO NOT think about its implementation when reading through the length function.  Again, it's a variable - and we're using it to build another function.  Yes, one that is returned to be called again in this function and built up again, but at each stack-frame, 'con' is simply whatever we build up in the previous stack frame.  It's a variable with a different meaning at each level.
+And in the final iteration, the closure that's been built up is called with the empty list.
 
-This is working with continuations.  In C# land, 'con' would be a known function that always does the same thing.  Here's it's a mutable variable (in a way) that happens to represent some function; one that we can use to build another function.
+So we're still recurring on the cdr of lst, but building a closure within a closure with a closure.....  And when we reach the termination point (lst = nil), we call cont, passing in the empty list:
 
-ARGH!
+#+BEGIN_SRC scheme
 
-|---------+--------------------------+--------------------------------------------|
-| lat     | con                      |                                            |
-|---------+--------------------------+--------------------------------------------|
-| (1 2 3) | (+ 0 x)                  |                                            |
-| (2 3)   | (+ 1 (+ 0 x))            |                                            |
-| (3)     | (+ 1 (+ 1 (+ 0 x)))      |                                            |
-| ()      | (+ 1 (+ 1 (+ 1 (+ 0 0))) | <- here is where 'x' is finally passed in. |
-|---------+--------------------------+--------------------------------------------|
+  (define (remove-1 lst cont)
+    (cond ((null? lst)
+           (cont '()))
+          ((eq? 1 (car lst))
+           (remove-1 (cdr lst) cont))
+          (else
+           (remove-1 (cdr lst)
+                     (lambda (remainder)
+                       (cont (cons (car lst) remainder)))))))
 
-So if I'm reading this right, the first will add 1 to the length of (cdr lat), so a traditional recursive definition.  The second, will, when unwinding the stack, call the provided function, which in turn calls the next function etc.
+  (remove-1 '(1 2 3 2 1) length)							; 3
+  (remove-1 '(1 2 3 2 1) identity)						; (2 3 2)
+  (remove-1 '(1 2 3 2 1) (lambda (x) (apply + x)))	; 7
 
-Note that there is no requirement for the con function to be rebuilt at every step.  It's just being used here because variables haven't been introduced yet; we could just call it once when we reach the end of the natural recursion.  That said, I'm not sure how to then break out...
+#+END_SRC
+
+The stack will look something like the following:
+
+#+BEGIN_SRC scheme
+
+  ;; iteration 1, cont is 
+
+  length
+
+  ;; iteration 2, return a function that takes x, and calls length on 2 consed onto x.
+
+  (lambda (x)
+    (length (cons 2 x)))
+
+  ;; iteration 3, return a function that takes y, and calls a function
+  ;; that takes x and calls length on 2 consed onto x, and passes 3
+  ;; consed onto y in.  Honestly, I find it easier to read the code and
+  ;; go "ahh, I get it" than to follow my own explanation :-(
+
+  (lambda (y)
+    ((lambda (x)
+       (length (cons 2 x)))
+     (cons 3 y)))
+
+  ;; iteration 4, cont is
+
+  (lambda (z)
+    ((lambda (y)
+       ((lambda (x)
+          (length (cons 2 x)))
+        (cons 3 y)))
+     (cons 2 z)))
+
+  ;; If we were to call the above, passing in the empty list:
+
+  ((lambda (z)
+    ((lambda (y)
+       ((lambda (x)
+          (length (cons 2 x)))
+        (cons 3 y)))
+     (cons 2 z))) '())							 ; 3
+
+  ;; Or using the identity function:
+
+  ((lambda (z)
+    ((lambda (y)
+       ((lambda (x)
+          (identity (cons 2 x)))
+        (cons 3 y)))
+     (cons 2 z))) '())							 ; (2 3 2)
+
+  ;; So unwinding the stack, we get:
+
+  ((lambda (y)
+     ((lambda (x)
+        (length (cons 2 x)))
+      (cons 3 y)))
+   '(2))											 ; 3
+
+  ((lambda (x)
+     (length (cons 2 x)))
+   '(3 2))											 ;3
+
+  (length '(2 3 2))								 ;3
+
+#+END_SRC

@@ -498,5 +498,97 @@ expression."
 					(rember*-f test? a (cdr lat))))))
 
 ;; Oh Christ, continuations again.  Or, "twenty years of imperative
-;; programming means that this is gonna hurt."
+;; programming means that this is gonna hurt."  See notes.org for a
+;; full explanation.
+
+(define (multirember&co a lat col)
+  "Splits lat into a list of all instances of a, and the
+remainder.  Calls col, passing in both lists."
+  (cond ((null? lat)
+			(col '() '()))
+		  ((eq? a (car lat))
+			(multirember&co a (cdr lat)
+								 (lambda (matches remainder)
+									(col (cons (car lat) matches) remainder))))
+		  (else
+			(multirember&co a (cdr lat)
+								 (lambda (matches remainder)
+									(col matches (cons (car lat) remainder)))))))
+
+(define (multiinsertLR new oldL oldR lat)
+  "Inserts new to the left of oldL and right of oldR."
+  (cond ((null? lat) '())
+		  ((eq? oldL (car lat))
+			(cons new (cons oldL (multiinsertLR new oldL oldR (cdr lat)))))
+		  ((eq? oldR (car lat))
+			(cons oldR (cons new (multiinsertLR new oldL oldR (cdr lat)))))
+		  (else
+			(cons (car lat)
+					(multiinsertLR new oldL oldR (cdr lat))))))
+
+(define (multiinsertLR&co new oldL oldR lat col)
+  "Same as above, but now col will be called with three parameters:
+the new list, and the number of left insertions and the number of
+right insertions."
+  (cond ((null? lat)
+			(col '() 0 0))
+		  ((eq? oldL (car lat))
+			(multiinsertLR&co new oldL oldR (cdr lat)
+									(lambda (working left right)
+									  (col
+										(cons new (cons oldL working))
+										(+ 1 left) right))))
+		  ((eq? oldR (car lat))
+			(multiinsertLR&co new oldL oldR (cdr lat)
+									(lambda (working left right)
+									  (col
+										(cons oldR (cons new working))
+										left (+ 1 right)))))
+		  (else
+			(multiinsertLR&co new oldL oldR (cdr lat)
+									(lambda (working left right)
+									  (col (cons (car lat) working)
+											 left right))))))
+(define (test1 a b c)
+  (identity a))
+
+(define (left-inserts a b c) b)
+
+(define (right-inserts a b c) c)
+
+(multiinsertLR&co 9 3 5 '(1 2 3 4 5 6 7 8) test1)
+
+;;; ToDo - rewrite the above from scratch; make sure it sticks.
+
+(define (even? x)
+  (eq? 0 (modulo x 2)))
+
+(define (evens-only* lst)
+  (cond ((null? lst) '())
+		  ((atom? (car lst))
+			(cond ((even? (car lst))
+					 (cons (car lst) (evens-only* (cdr lst))))
+					(else
+					 (evens-only* (cdr lst)))))
+		  (else
+			(cons (evens-only* (car lst))
+					(evens-only* (cdr lst))))))
+
+(define (split-evens lst col)
+  "Splits lst into odds and evens, passing them into col."
+  (cond ((null? lst) (col '() '()))
+		  ((even? (car lst))
+			(split-evens (cdr lst)
+							 (lambda (odds evens)
+								(col odds (cons (car lst) evens)))))
+		  (else
+			(split-evens (cdr lst)
+							 (lambda (odds evens)
+								(col (cons (car lst) odds) evens))))))
+
+;;; Slightly less obvious.....  Needs a func inside a func so we can
+;;; recurr on both the car and the cdr.
+
+(define (split-evens* lst col)
+  )
 
