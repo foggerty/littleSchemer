@@ -99,20 +99,20 @@ The stack will look something like the following:
   ;; If we were to call the above, passing in the empty list:
 
   ((lambda (z)
-    ((lambda (y)
-       ((lambda (x)
-          (length (cons 2 x)))
-        (cons 3 y)))
-     (cons 2 z))) '())							 ; 3
+     ((lambda (y)
+        ((lambda (x)
+           (length (cons 2 x)))
+         (cons 3 y)))
+      (cons 2 z))) '())							 ; 3
 
   ;; Or using the identity function:
 
   ((lambda (z)
-    ((lambda (y)
-       ((lambda (x)
-          (identity (cons 2 x)))
-        (cons 3 y)))
-     (cons 2 z))) '())							 ; (2 3 2)
+     ((lambda (y)
+        ((lambda (x)
+           (identity (cons 2 x)))
+         (cons 3 y)))
+      (cons 2 z))) '())							 ; (2 3 2)
 
   ;; So unwinding the stack, we get:
 

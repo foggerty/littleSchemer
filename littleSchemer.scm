@@ -534,47 +534,48 @@ right insertions."
 			(col '() 0 0))
 		  ((eq? oldL (car lat))
 			(multiinsertLR&co new oldL oldR (cdr lat)
-									(lambda (working left right)
+									(lambda (working left-inserts right-inserts)
 									  (col
 										(cons new (cons oldL working))
-										(+ 1 left) right))))
+										(+ 1 left-inserts) right-inserts))))
 		  ((eq? oldR (car lat))
 			(multiinsertLR&co new oldL oldR (cdr lat)
-									(lambda (working left right)
+									(lambda (working left-inserts right-inserts)
 									  (col
 										(cons oldR (cons new working))
-										left (+ 1 right)))))
+										left-inserts (+ 1 right-inserts)))))
 		  (else
 			(multiinsertLR&co new oldL oldR (cdr lat)
-									(lambda (working left right)
+									(lambda (working left-inserts right-inserts)
 									  (col (cons (car lat) working)
-											 left right))))))
-(define (test1 a b c)
+											 left-inserts right-inserts))))))
+
+(define (show-result a b c)
   (identity a))
 
 (define (left-inserts a b c) b)
 
 (define (right-inserts a b c) c)
 
-(multiinsertLR&co 9 3 5 '(1 2 3 4 5 6 7 8) test1)
-
-;;; ToDo - rewrite the above from scratch; make sure it sticks.
+(multiinsertLR&co 9 3 5 '(1 2 3 4 3 5 6 7 8) show-result)
+(multiinsertLR&co 9 3 5 '(1 2 3 4 3 5 6 7 8) left-inserts)
+(multiinsertLR&co 9 3 5 '(1 2 3 4 3 5 6 7 8) right-inserts)
 
 (define (even? x)
   (eq? 0 (modulo x 2)))
 
 (define (evens-only* lst)
+  "Recursively extract (and flatten) all even numbers."
   (cond ((null? lst) '())
 		  ((atom? (car lst))
-			(cond ((even? (car lst))
-					 (cons (car lst) (evens-only* (cdr lst))))
-					(else
-					 (evens-only* (cdr lst)))))
+			(if (even? (car lst))
+				 (cons (car lst) (evens-only* (cdr lst)))			  
+				 (evens-only* (cdr lst))))
 		  (else
-			(cons (evens-only* (car lst))
-					(evens-only* (cdr lst))))))
+			(append (evens-only* (car lst))
+					  (evens-only* (cdr lst))))))
 
-(define (split-evens lst col)
+(define (split-odd-even lst col)
   "Splits lst into odds and evens, passing them into col."
   (cond ((null? lst) (col '() '()))
 		  ((even? (car lst))
@@ -585,10 +586,38 @@ right insertions."
 			(split-evens (cdr lst)
 							 (lambda (odds evens)
 								(col (cons (car lst) odds) evens))))))
+(define (dump a b)
+  (pretty-print a)
+  (pretty-print b))
 
-;;; Slightly less obvious.....  Needs a func inside a func so we can
-;;; recurr on both the car and the cdr.
+
+(define (flattern lst)
+  (cond ((null? lst) '())
+		  ((atom? (car lst))
+			(cons (car lst) (flattern (cdr lst))))
+		  (else
+			(append (flattern (car lst))
+					  (flattern (cdr lst))))))
 
 (define (split-evens* lst col)
-  )
+  "Splits lst into evens and odds, passing both into col as flattened lists."
+  (cond ((null? lst)
+			(col '() '()))
+		  ((atom? (car lst))
+			(if (even? (car lst))
+				 (split-evens* (cdr lst)
+									(lambda (evens odds)
+									  (col (cons (car lst) evens) odds)))
+				 (split-evens* (cdr lst)
+									(lambda (evens odds)
+									  (col evens (cons (car lst) odds))))))
+		  (else
+			(split-evens* (flattern lst) col))))
+
+(define fred '(1 (2 3) (((4 (5))) 6) 7 (8) ((9))))
+
+(split-evens* fred (lambda (a b)
+							(pretty-print a)
+							(pretty-print b)))
+
 
